@@ -45,12 +45,27 @@ class NameNormalizer(DataProvider):
 
 
     def strip_artist_album_name_from_songname(self) -> None:
-        """ strip out artist name and album name if they are a part of name of a song name """
+        """ Strip out artist name and album name if they are a part of name of a song name. Special case are albums with one track only since the track is usualy called with the same name as the album so in the case on one-track album, the name of the track will be 01 - <name of the album>.mp3
+         """
         for artist_folder in os.listdir(self.root):
             if not os.path.isdir(os.path.join(self.root, artist_folder)):
                 continue
             for album_folder in os.listdir(os.path.join(self.root, artist_folder)):
                 tracklist = [track for track in os.listdir(os.path.join(self.root, artist_folder, album_folder)) if track.endswith(tuple(self.ext))]
+               
+                # if i have a one-track album, rename it as 01 <name of the album>.mp3
+                if len(tracklist) == 1:
+                    print(f"Album {album_folder} contains only one track ==> normalizing it..")
+                    for file in os.listdir(os.path.join(self.root, artist_folder, album_folder)):
+                        if file.endswith(tuple(self.ext)):
+                            _, extension = os.path.splitext(os.path.join(self.root, artist_folder, album_folder, file))
+                            filename = f"01 {album_folder}"
+                            src_file = file
+                            dst_file = filename + extension
+                            print(f"Renaming {os.path.join(artist_folder, album_folder, src_file)} to {os.path.join(artist_folder, album_folder, dst_file)}")
+                            os.rename(os.path.join(self.root, artist_folder, album_folder, src_file), os.path.join(self.root, artist_folder, album_folder, dst_file))
+               
+                # if i have album where all the songs have artist name in its name, remove this artist name from it
                 if len(tracklist) > 1 and all(artist_folder in song for song in tracklist):
                     print(f"Album {album_folder} contains artist name '{artist_folder}' as part of all audio tracks => stripping it out..")
                     for file in os.listdir(os.path.join(self.root, artist_folder, album_folder)):
@@ -59,6 +74,8 @@ class NameNormalizer(DataProvider):
                             dst_file = file.replace(artist_folder, "", 1)
                             print(f"Renaming {os.path.join(artist_folder, album_folder, src_file)} to {os.path.join(artist_folder, album_folder, dst_file)}")
                             os.rename(os.path.join(self.root, artist_folder, album_folder, src_file), os.path.join(self.root, artist_folder, album_folder, dst_file))
+
+                # if i have album where all the songs have album name in its name, remove this album name from it
                 if len(tracklist) > 1 and all(album_folder in song for song in tracklist):
                     print(f"Album {album_folder} contains album name '{album_folder}' as part of all audio tracks => stripping it out..")
                     for file in os.listdir(os.path.join(self.root, artist_folder, album_folder)):
