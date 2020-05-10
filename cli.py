@@ -47,8 +47,10 @@ class NameNormalizer(DataProvider):
     def strip_artist_album_name_from_songname(self) -> None:
         """ strip out artist name and album name if they are a part of name of a song name """
         for artist_folder in os.listdir(self.root):
+            if not os.path.isdir(os.path.join(self.root, artist_folder)):
+                continue
             for album_folder in os.listdir(os.path.join(self.root, artist_folder)):
-                tracklist = [track for track in os.listdir(os.path.join(self.root, artist_folder, album_folder)) if track.endswith(tuple(ext))]
+                tracklist = [track for track in os.listdir(os.path.join(self.root, artist_folder, album_folder)) if track.endswith(tuple(self.ext))]
                 if len(tracklist) > 1 and all(artist_folder in song for song in tracklist):
                     print(f"Album {album_folder} contains artist name '{artist_folder}' as part of all audio tracks => stripping it out..")
                     for file in os.listdir(os.path.join(self.root, artist_folder, album_folder)):
@@ -94,7 +96,7 @@ class NameNormalizer(DataProvider):
                 for file in os.listdir(os.path.join(self.root, artist, album)):
                     if file.endswith(tuple(self.ext)) and "-" in file:
                         src_file = os.path.join(self.root, artist, album, file)
-                        dst_file = os.path.join(self.root, artist, album, file.replace("-", "", 1).replace("-", " "))
+                        dst_file = os.path.join(self.root, artist, album, file.replace("-", " "))
                         print(f"Stripping - from song {src_file}")
                         os.rename(src_file, dst_file)
                 if "-" in album:
@@ -571,25 +573,25 @@ class BroadcastFileNormalizer(DataProvider):
                     print(e, os.path.join(self.root, artist, album))
 
 
-    def check_names_integrity(self, root:str) -> None:
-        """ Check if all song name match the broadcast pattern before u move them to the server """
-        ext = get_all_audio_extensions()
-        for path, dirs, folders in os.walk(root):
-            for file in folders:
-                if file.endswith(tuple(self.ext)):
-                    filename, ext = os.path.splitext(os.path.join(path, file))
-                    if self.p_broadcast.match(os.path.basename(filename)):
-                        continue
-                    else:
-                        self.not_matched.add(filename)
-                        print(filename, "-> not matched")
+    # def check_names_integrity(self, dir_) -> None:
+    #     """ Check if all song name match the broadcast pattern before u move them to the server """
+    #     ext = get_all_audio_extensions()
+    #     for path, dirs, folders in os.walk(dir_):
+    #         for file in folders:
+    #             if file.endswith(tuple(self.ext)):
+    #                 filename, ext = os.path.splitext(os.path.join(path, file))
+    #                 if self.p_broadcast.match(os.path.basename(filename)):
+    #                     continue
+    #                 else:
+    #                     self.not_matched.add(filename)
+    #                     print(filename, "-> not matched")
 
 
-    def check_bitrate(self, root: str, min_bitrate: bytes) -> dict:
+    def check_bitrate(self, min_bitrate=b'128000') -> None:
         """ Make a map of files having less bitrate than specified """
         command = "ffprobe -v error -show_entries format=bit_rate -of default=noprint_wrappers=1:nokey=1"
         d = {}
-        for path, dirs, files in os.walk(root):
+        for path, dirs, files in os.walk(self.root):
             for file in files:
                 if file.endswith(tuple(self.ext)):
                     file_name = os.path.join(path, file)
@@ -597,34 +599,64 @@ class BroadcastFileNormalizer(DataProvider):
                     out = subprocess.check_output(full_command)
                     if out < min_bitrate:
                         d[file_name] = out
-        return d
+
+        return(d)
 
 
-    def count_audiofiles(self) -> int:
-        """ Count audiofiles in a directory """
+    def count_audiofiles(self, path:str) -> int:
+        """ Count audiofiles in a directory, serves as a helper to deleting """
         counter = 0
-        for item in os.listdir(self.root):
-            if any(ext in item for ext in self.ext):
+        for item in os.listdir(path):
+            if any(ex in item for ex in self.ext):
                 counter += 1
+            elif item.endswith(".py"):
+                counter +=1
             else:
                 continue
         return counter
 
 
-    def delete_folders_without_audio(self) -> int:
-        """ Delete folders where no audio files are left, recursively from botom up """
+    def delete_folders_without_audio(self) -> None:
+        """ Delete folders where no audio files are left """
         counter = 0
         for path, dirs, _ in os.walk(self.root):
-            if len(dirs) == 0 and self.count_audiofiles() == 0:
+            if len(dirs) == 0 and self.count_audiofiles(path) == 0:
                 counter += 1
                 print(f"deleting.. {path}")
-                if path == os.getcwd():
-                    break
                 shutil.rmtree(path)
         if counter > 0:
             return self.delete_folders_without_audio()
         else:
             return None
+
+# TODO variables.. bitrate and paths
+def change_bitrate(source_dir=os.getcwd()) -> None:
+    """Change bitrate to 128k value"""
+    codec = " [lame]"
+    path_replacement = "3] to be transfered"
+    head, tail = os.path.split(source_dir)
+
+    for path, dirs, files in os.walk(source_dir):
+        for file in files:
+            filepath_source = os.path.abspath(os.path.join(path, file))
+            index = filepath_source.rfind(".") #DEBUG
+            filepath_norm = filepath_source[:index] + codec + filepath_source[index:] #DEBUG
+            filepath_target = filepath_norm.replace(tail, path_replacement)
+            print(filepath_target)
+            dirpath_target = os.path.dirname(filepath_target)
+            # make it work for flac, alac and other extensions..
+            if not file.endswith(".mp3"):
+                filename, extension = os.path.splitext(filepath_target)
+                filepath_target = filename + ".mp3"
+            # check the existence to avoid overwiting
+            if os.path.exists(filepath_target): 
+                print(f"file {filepath_target} already exists, skipping..")
+                continue
+            # check the existence to avoid eror
+            if not os.path.exists(dirpath_target): 
+                os.makedirs(dirpath_target)
+            print(f"encoding from {filepath_source} to {filepath_target}")
+            subprocess.run(f'ffmpeg -i "{filepath_source}" -metadata comment="ripped with lame @128k" -codec:a libmp3lame -b:a 128k -ar 44100 "{filepath_target}"')
 
 
 
@@ -655,7 +687,7 @@ def main():
     parser.add_argument("-stw", "--stripwhitespace", help="delete multiple spaces in song names, ale trailing space at the end as well", action="store_true")
     parser.add_argument("-stt", "--stripdot", help="some songs have this format: 01. songname.mp3, this flag strips the .", action="store_true")
     parser.add_argument("-stp", "--stripparens", help="some songs have this format: (02) songname, this flag strips the ()", action="store_true")
-    parser.add_argument("-ste", "--stripelse", help="this flag strips whatever else is specified in additional params [used for manual clearing mostly]") # TODO not working
+    parser.add_argument("-ste", "--stripelse", help="this flag strips whatever else is specified in additional params [used for manual clearing mostly]") # TODO... variable list of chars.. 
 
     # splitting switches
     #TODO
@@ -665,16 +697,18 @@ def main():
     parser.add_argument("-sama", "--allalbums", help="shows all albums that were matched with some regex", action="store_true")
     parser.add_argument("-snms", "--nosongs", help="shows all songs that were NOT matched with any regex", action="store_true")
     parser.add_argument("-snma", "--noalbums", help="shows all albums that were NOT matched with any regex", action="store_true")
-    parser.add_argument("-cb", "--checkbitrate", help="show files that have bitrate less then specified", type=bytes) # TODO...
+    parser.add_argument("-cb", "--checkbitrate", help="show files that have bitrate less then specified", action="store_true") # TODO... vriable bitrate
 
-    # switch to process normalization naming for broadcasting
+    # switch to process normalization naming, moving and deleting for broadcasting
     parser.add_argument("-nn", "--normalizenames", help="renames the files (. -- . -- .) and moves them to another folder", action="store_true")
+    parser.add_argument("-de", "--deleteempty", help="deletes folders containing no audio files", action="store_true")
+    parser.add_argument("-nb", "--bitnorm", help="normalize bitrate to 128k", action="store_true") #TODO add variable bitrates...
 
     args = parser.parse_args()
 
     # get the global ars
     src = args.sourcepath
-    dst = args.destinationpath
+    # dst = args.destinationpath
     quite = args.quite
 
     # initialize the classes
@@ -701,45 +735,20 @@ def main():
     if args.stripdot: name_normalizer.strip_dot_after_track_from_songname()
 
     # displaying options
-    if args.allsongs: rgx_matcher.get_all_regex_album_match()
-    if args.nosongs: rgx_matcher.get_all_regex_song_match()
-    if args.allalbums: rgx_matcher.get_no_regex_song_match()
+    if args.allsongs: rgx_matcher.get_all_regex_song_match()
+    if args.allalbums: rgx_matcher.get_all_regex_album_match()
+    if args.nosongs: rgx_matcher.get_no_regex_song_match()
     if args.noalbums: rgx_matcher.get_no_regex_album_match()
-    if args.checkbitrate: rgx_matcher.check_bitrate()
+    if args.checkbitrate: brdcast_normalizer.check_bitrate()
 
     # broadcaster options
     if args.normalizenames: brdcast_normalizer.normalize_names()
-    # print(src)
-    # # showing what/how the cleaning process succeded using different arg options with different verbosity
-    # if quite:
-    #     if show_all_albums_matches: r.get_all_regex_album_match()
-    #     if show_all_songs_matches: r.get_all_regex_song_match()
-    #     if show_no_songs_matches: r.get_no_regex_song_match()
-    #     if show_no_albums_matches: r.get_no_regex_album_match()
-    # else:
-    #     if show_all_albums_matches:
-    #         print(f":::showing all albums that had matched a particular pattern.:::\n")
-    #         r.get_all_regex_album_match()
-    #     if show_all_songs_matches:
-    #         print(f":::showing all songs that had matched a particular pattern:::\n")
-    #         r.get_all_regex_song_match()
-    #     if show_no_songs_matches:
-    #         print(f":::showing all songs that did not match any particular pattern:::\n")
-    #         r.get_no_regex_song_match()
-    #     if show_no_albums_matches:
-    #         print(f":::showing all albums that did not match any particular pattern:::\n")
-    #         r.get_no_regex_album_match()
+    if args.checkbitrate: print(brdcast_normalizer.check_bitrate())
+    if args.deleteempty: brdcast_normalizer.delete_folders_without_audio()
+    if args.bitnorm: change_bitrate()
 
-    # checking bit_rate
-    # # TODO
-    # if check_bitrate:
-    #     d = b.checkbitrate()
-    #     print(d)
 
-    #rename for server and move
-    # if normalize_names: b.normalize_names()
-
-        #delete empty folders - always
 
 if __name__ == "__main__":
     main()
+    
