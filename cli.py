@@ -531,14 +531,14 @@ class BroadcastFileNormalizer(DataProvider):
     def root(self):
         return self._root
 
-    def normalize_names(self) -> None:
+    def normalize_names(self, dst_taildir) -> None:
         """ Renames songs for radio server, following this pattern: 01 Name Of Artist -- Name Of Album -- Name Of Song.mp3
         The names for artist, album, song should be first cleared, since the final name is parsed from the filesystem names.
         All files are moved to the particular folder - '2] to be bitnormed' is default
         """
 
         basedir, taildir = os.path.split(self.root) # tail will be swapped to '2] to be bitnormed'
-        dst_taildir = '2] to be bitnormed' # hardcoced since i dont assume i will change it
+        # dst_taildir = '2] to be bitnormed' # hardcoced since i dont assume i will change it
 
         for artist in os.listdir(self.root):
              # this is just because i run this script fromt the root folder for simplicity sake
@@ -717,7 +717,8 @@ def main():
     parser.add_argument("-cb", "--checkbitrate", help="show files that have bitrate less then specified", action="store_true") # TODO... vriable bitrate
 
     # switch to process normalization naming, moving and deleting for broadcasting
-    parser.add_argument("-nn", "--normalizenames", help="renames the files (. -- . -- .) and moves them to another folder", action="store_true")
+    parser.add_argument("-nn", "--normalizenames", help="renames the files (. -- . -- .) and moves them to another folder, destination folder can be specified using -d flag", action="store_true")
+    parser.add_argument("-d", "--destinationdir", help="destination directory for renamed files", default="2] to be bitnormed")
     parser.add_argument("-de", "--deleteempty", help="deletes folders containing no audio files", action="store_true")
     parser.add_argument("-nb", "--bitnorm", help="normalize bitrate to 128k", action="store_true") #TODO add variable bitrates...
 
@@ -727,6 +728,9 @@ def main():
     src = args.sourcepath
     # dst = args.destinationpath
     quite = args.quite
+
+    # dir where to move normalized names for brodcast
+    dst_taildir = args.destinationdir
 
     # initialize the classes
     name_normalizer = NameNormalizer(src)
@@ -759,7 +763,7 @@ def main():
     if args.checkbitrate: brdcast_normalizer.check_bitrate()
 
     # broadcaster options
-    if args.normalizenames: brdcast_normalizer.normalize_names()
+    if args.normalizenames: brdcast_normalizer.normalize_names(dst_taildir=dst_taildir)
     if args.checkbitrate: print(brdcast_normalizer.check_bitrate())
     if args.deleteempty: brdcast_normalizer.delete_folders_without_audio()
     if args.bitnorm: change_bitrate()
