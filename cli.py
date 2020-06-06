@@ -351,6 +351,28 @@ class NameNormalizer(DataProvider):
         NameNormalizer.lowercase_artist(self)
 
 
+    def sort_audiofolders(self, root, target) -> None:
+        """ Move audio folders into correct path in alphabetical structure. Used for moving properly named files to completed folder. """
+        
+        print(self.root)
+        for artist in os.listdir(self.root):  
+            if not os.path.isdir(os.path.join(self.root, artist)):
+                continue
+            os.chdir(self.root)
+            artist_path = os.path.abspath(artist)
+            os.chdir(artist_path)
+            for album in os.listdir(artist_path):
+                if os.path.isdir(os.path.abspath(album)):
+                    album_path = os.path.abspath(album)
+                    dir_path = os.path.dirname(album_path)
+                    target_dir = os.path.join(target, artist[0].lower(), artist, album)
+                    if os.path.exists(target_dir):
+                        print(f"album '{album}' on path '{album_path}' is existing on target path, skipping..")
+                        continue
+                    else:
+                        print(f"album '{album}' on path '{album_path}' is not existing on target path '{target_dir}', moving now.. ")
+                        shutil.move(album_path, target_dir)
+
     # def __call__(self, root):
     #     """ Calls the functions in appropriate order. It can be called either on the clas itself NameNormalizer(path) or on an object """
     #     NameNormalizer.strip_apimatch_from_albumname(root)
@@ -683,7 +705,7 @@ def main():
 
     # general swithces
     parser.add_argument("-src", "--sourcepath", help="specify the root directory path", default=os.getcwd())
-    # parser.add_argument("-dst", "--destinationpath", help="specifut where the renamed files should be moved", type=str, default=) TODO
+    parser.add_argument("-dst", "--destinationpath", help="specify where the files should be moved", default=r'Z:\Music\!!! completed, tagged !!!')
     parser.add_argument("-q", "--quite", action="store_true")
 
     # titlecase/lowercase switches  #TODO add  mutualexclusive group
@@ -709,6 +731,9 @@ def main():
     # splitting switches
     #TODO
 
+    # moving to proper folder in main filesystem
+    parser.add_argument("-sort", "--sortfolders", help="moves audiofile folder to proper place based on artist/album name", action="store_true")
+
     # printing/checking switches
     parser.add_argument("-sams", "--allsongs", help="shows all song that were matched with some regex", action="store_true")
     parser.add_argument("-sama", "--allalbums", help="shows all albums that were matched with some regex", action="store_true")
@@ -724,9 +749,9 @@ def main():
 
     args = parser.parse_args()
 
-    # get the global ars
+    # get the global args
     src = args.sourcepath
-    # dst = args.destinationpath
+    dst = args.destinationpath
     quite = args.quite
 
     # dir where to move normalized names for brodcast
@@ -754,6 +779,7 @@ def main():
     if args.stripwhitespace: name_normalizer.strip_whitespaces_from_songname()
     if args.stripelse: name_normalizer.strip_whatever_from_name()
     if args.stripdot: name_normalizer.strip_dot_after_track_from_songname()
+    if args.sortfolders: name_normalizer.sort_audiofolders(root=src, target=dst)
 
     # displaying options
     if args.allsongs: rgx_matcher.get_all_regex_song_match()
@@ -767,6 +793,7 @@ def main():
     if args.checkbitrate: print(brdcast_normalizer.check_bitrate())
     if args.deleteempty: brdcast_normalizer.delete_folders_without_audio()
     if args.bitnorm: change_bitrate()
+
 
 
 
