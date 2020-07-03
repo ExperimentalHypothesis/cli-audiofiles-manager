@@ -27,4 +27,6 @@ It operates on filesystem with this tree structure:
   ```
 There is only one root, that can contain mulitple artist folder, in each artist folder there can be multiple albums folders (since each artist can have number of releases), in each album folder, there can be multiple files (song files).
 
- 
+It is written in a single file so that it can be easily run from command line. All you need to do is just to add this file to the root folder where all the audio files you want to proceed are located. Then run a particluar command.
+
+## Basic Commands:
